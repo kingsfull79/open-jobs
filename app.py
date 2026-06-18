@@ -13,7 +13,7 @@ authoritative, so anything you tweak there shows up here.
 You still need a local copy of the dataset (python3 download.py) and, for steps 2-3, an
 OPENAI_API_KEY (paste it in the sidebar).
 """
-import json, os, re, subprocess, sys
+import io, json, os, re, subprocess, sys, zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -60,6 +60,24 @@ def run_stream(cmd, env=None, cwd=ROOT):
     (status.success if proc.returncode == 0 else status.error)(
         f"{'done' if proc.returncode == 0 else 'exited ' + str(proc.returncode)} · {cmd[1] if len(cmd) > 1 else ''}")
     return proc.returncode, full
+
+
+def read_resume_upload(up):
+    """Plain text for .txt/.md; for .docx, pull the paragraph text out of the zip (no extra
+    dependency — a .docx is just a zip with word/document.xml)."""
+    raw = up.read()
+    if up.name.lower().endswith(".docx"):
+        try:
+            xml = zipfile.ZipFile(io.BytesIO(raw)).read("word/document.xml").decode("utf-8", "replace")
+            xml = xml.replace("</w:p>", "\n").replace("<w:tab/>", "\t")
+            text = re.sub(r"<[^>]+>", "", xml)
+            for a, b in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'), ("&#39;", "'")):
+                text = text.replace(a, b)
+            return re.sub(r"\n{3,}", "\n\n", text).strip()
+        except Exception as e:
+            st.error(f"Could not read .docx: {e}")
+            return ""
+    return raw.decode("utf-8", "replace")
 
 
 def load_json(path):
@@ -217,7 +235,7 @@ with tab_hull:
             df = pd.DataFrame(hull)
             show = [c for c in ["company", "title", "level", "remote_scope", "country_code",
                                 "salary_min_k", "salary_max_k", "url"] if c in df.columns]
-            st.dataframe(df[show], use_container_width=True, height=380)
+            st.dataframe(df[show], width="stretch", height=380)
         else:
             st.error("Empty hull — loosen a filter. The hull must CONTAIN every relevant role.")
 
@@ -237,13 +255,13 @@ with tab_learn:
     rc1, rc2 = st.columns([2, 1])
     with rc2:
         use_sample = st.checkbox("Use egd-resume.txt", value=False)
-        up = st.file_uploader("…or upload", type=["txt", "md"])
+        up = st.file_uploader("…or upload", type=["txt", "md", "docx"])
     with rc1:
         default_resume = ""
         if use_sample and (ROOT / "egd-resume.txt").exists():
             default_resume = (ROOT / "egd-resume.txt").read_text(encoding="utf-8", errors="replace")
         elif up is not None:
-            default_resume = up.read().decode("utf-8", "replace")
+            default_resume = read_resume_upload(up)
         resume_text = st.text_area("Resume text", value=default_resume, height=180,
                                    placeholder="Paste the resume here…")
 
@@ -322,7 +340,7 @@ with tab_rank:
         show = [c for c in ["rank", "company", "title", score_col, "comparisons", "compared", "url"]
                 if c and c in df.columns]
         st.dataframe(
-            df[show], use_container_width=True, height=460,
+            df[show], width="stretch", height=460,
             column_config={"url": st.column_config.LinkColumn("apply", display_text="apply")}
                 if "url" in show else None)
 
