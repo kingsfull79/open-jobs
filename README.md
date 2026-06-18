@@ -18,6 +18,7 @@ https://download.jobscream.com/open-jobs.parquet      # ~21 GB, refreshed in pla
 | File | What it does |
 |------|--------------|
 | `AGENTS.md` | The manual. Hand this to an LLM agent and it can drive the whole pipeline. |
+| `app.py` | A **Streamlit GUI** over the whole pipeline (hull → learn → rank), in your browser. |
 | `download.py` | Resumable streaming download of the dataset. |
 | `stream.py` | Iterate the dataset row by row, memory-bounded, local file or straight off the URL. |
 | `hull.py` | **Step 1.** Filter to the "convex hull" of a search: the smallest set that still contains every relevant role. |
@@ -58,6 +59,19 @@ python3 btrank.py   --candidates hull.json --decisions langsort_decisions.jsonl 
 ```
 
 That's it: `ranked.json` is your shortlist, best first.
+
+### Prefer a GUI?
+
+`app.py` wraps the exact same three steps in a browser app. It's a thin orchestration layer — it
+shells out to `hull.py` / `langsort.py` / `btrank.py`, streams their live progress, and reads their
+JSON back into sortable tables — so the scripts stay authoritative and anything you tweak there shows
+up here. One tab per stage; the last tab exports a self-contained, searchable `report.html`.
+
+```bash
+pip install -r requirements.txt        # streamlit, pandas, pyarrow, numpy
+python3 download.py                     # get a local copy of the dataset first (~21 GB)
+streamlit run app.py                    # paste an OPENAI_API_KEY in the sidebar for steps 2–3
+```
 
 ## Why it's built this way
 
